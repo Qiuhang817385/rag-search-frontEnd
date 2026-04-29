@@ -22,6 +22,7 @@ import {
   RAG_DEMO_CHUNK_OVERLAP,
   RAG_DEMO_CHUNK_SIZE,
 } from '@/lib/rag-split-config'
+import { ragEndpoints } from '@/lib/rag-api'
 import { countTokens } from '@/lib/rag-tokens'
 
 const { Text } = Typography
@@ -42,7 +43,7 @@ const hueForIndex = (i: number) => (i * 47) % 360
 const TIP_EMPTY =
   '载入或粘贴文档后，可在此自由调整切片策略与参数做预览；后端入库参数另见上方提示。'
 const BACKEND_FIXED_MESSAGE =
-  `后端 POST /api/documents/ingest 已写死：RecursiveCharacterTextSplitter，` +
+  `后端 POST ${ragEndpoints.documentsIngest} 已写死：RecursiveCharacterTextSplitter，` +
   `chunkSize=${RAG_DEMO_CHUNK_SIZE}，chunkOverlap=${RAG_DEMO_CHUNK_OVERLAP}。` +
   `下方预览仅供本地实验；若与后端不一致，请以接口返回的 chunkCount / splitConfig 为准。`
 

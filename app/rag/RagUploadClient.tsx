@@ -18,16 +18,14 @@ import {
 import zhCN from 'antd/locale/zh_CN'
 import type { UploadProps } from 'antd'
 import { useCallback, useMemo, useState } from 'react'
+import {
+  getBackendOrigin,
+  postDocumentsIngest,
+  ragEndpoints,
+} from '@/lib/rag-api'
 import ChunkPreviewPanel from './ChunkPreviewPanel'
 
 const { TextArea } = Input
-
-function getApiBase(): string {
-  return (
-    process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ??
-    'http://localhost:3010'
-  )
-}
 
 export type IngestSuccess = {
   documentId: string
@@ -35,6 +33,9 @@ export type IngestSuccess = {
   filename: string | null
   message: string
   chunkCount: number
+  /** 后端 ingest 已写入每块 embedding，可选展示 */
+  embeddingDimensions?: number
+  embeddingModel?: string
   splitConfig: {
     splitter: string
     chunkSize: number
@@ -50,7 +51,7 @@ function RagUploadInner() {
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<IngestSuccess | null>(null)
 
-  const apiBase = useMemo(() => getApiBase(), [])
+  const apiBase = useMemo(() => getBackendOrigin(), [])
 
   const submit = useCallback(async () => {
     const body = text.trim()
@@ -62,13 +63,9 @@ function RagUploadInner() {
     setError(null)
     setResult(null)
     try {
-      const res = await fetch(`${apiBase}/api/documents/ingest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          text: body,
-          filename: fileLabel ?? undefined,
-        }),
+      const res = await postDocumentsIngest({
+        text: body,
+        filename: fileLabel ?? undefined,
       })
       const data = (await res.json().catch(() => ({}))) as
         | IngestSuccess
@@ -130,7 +127,9 @@ function RagUploadInner() {
           </Typography.Title>
           <Typography.Text type="secondary">
             粘贴 TXT / Markdown，或上传文件；将调用{' '}
-            <Typography.Text code>POST /api/documents/ingest</Typography.Text>
+            <Typography.Text code>
+              POST {ragEndpoints.documentsIngest}
+            </Typography.Text>
             ，后端地址：{apiBase}
           </Typography.Text>
         </div>
