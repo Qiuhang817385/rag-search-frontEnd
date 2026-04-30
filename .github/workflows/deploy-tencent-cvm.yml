@@ -1,0 +1,44 @@
+# 可复用工作流：通过 SSH 在服务器执行部署脚本
+name: Reusable — Deploy via SSH (Tencent CVM)
+
+on:
+  workflow_call:
+    inputs:
+      deploy_directory:
+        description: '服务器上该仓库的目录（git clone 所在路径）'
+        required: true
+        type: string
+      deploy_script:
+        description: '在 deploy_directory 内执行的脚本相对路径'
+        required: false
+        default: './deploy.sh'
+        type: string
+      git_branch:
+        description: 'main'
+        required: false
+        default: main
+        type: string
+    secrets:
+      SSH_HOST:
+        required: true
+      SSH_USER:
+        required: true
+      SSH_PRIVATE_KEY:
+        required: true
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy over SSH
+        uses: appleboy/ssh-action@v1.0.3
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          port: 22
+          script_stop: true
+          script: |
+            set -euo pipefail
+            cd ${{ inputs.deploy_directory }}
+            bash ${{ inputs.deploy_script }}

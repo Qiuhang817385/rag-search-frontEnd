@@ -1,0 +1,17 @@
+name: Deploy API to Tencent
+
+on:
+  push:
+    branches: [main]
+
+jobs:
+  deploy:
+    uses: ./.github/workflows/deploy-tencent-cvm.yml
+    with:
+      deploy_directory: /var/www/rag-search-frontEnd
+      deploy_script: ./deploy.sh
+      git_branch: main
+    secrets:
+      SSH_HOST: ${{ secrets.SSH_HOST }}
+      SSH_USER: ${{ secrets.SSH_USER }}
+      SSH_PRIVATE_KEY: ${{ secrets.SSH_PRIVATE_KEY }}

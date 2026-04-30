@@ -7,24 +7,24 @@
 
 ## 一、全栈里程碑摘要（便于对齐）
 
-| 层级 | 里程碑 |
-|------|--------|
-| **后端** | Nest 全局前缀 `/api`；文档入库 `POST /api/documents/ingest`（Demo 固定 **RecursiveCharacterTextSplitter · chunkSize 1000 · overlap 150**）；向量检索与 RAG **`/api/rag/search`**、流式对话 **`/api/rag/chat`**（SSE，`data: {JSON}`）；Embedding 等见 `back_end`。 |
-| **前端（本文档）** | 文档上传与**可调 / 提示后端写死**的切片预览；RAG **search** 调试区；**chat** SSE 消费、`react-markdown` 流式渲染、**meta 引用**与 **o200k token** 统计；`NEXT_PUBLIC_API_URL` 指向后端 Origin。 |
+| 层级               | 里程碑                                                                                                                                                                                                                                                                                     |
+| ------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **后端**           | Nest 全局前缀 `/api`；<br />文档入库 `POST /api/documents/ingest`（Demo 固定 **RecursiveCharacterTextSplitter · chunkSize 1000 · overlap 150**）；<br />向量检索与 RAG **`/api/rag/search`**、<br />流式对话 **`/api/rag/chat`**（SSE，`data: {JSON}`）；<br />Embedding 等见 `back_end`。 |
+| **前端（本文档）** | 文档上传与**可调 / 提示后端写死**的切片预览；RAG **search** 调试区；**chat** SSE 消费、`react-markdown` 流式渲染、**meta 引用**与 **o200k token** 统计；`NEXT_PUBLIC_API_URL` 指向后端 Origin。                                                                                            |
 
 ---
 
 ## 二、技术栈与依赖（前端特有）
 
-| 类别 | 依赖 | 用途 |
-|------|------|------|
-| 框架 | `next@16`、`react@19` | App Router、RSC/客户端组件拆分 |
-| UI | `antd@6`、`@ant-design/icons` | 布局、表单、卡片、折叠等 |
-| AI 对话 UI | `@ant-design/x` | `Sender`、`XProvider`（对话输入；需 **客户端 + 动态 `ssr: false`** 避免服务端渲染异常） |
-| RAG / 文本 | `@langchain/core`、`@langchain/textsplitters` | 与后端一致的 **Recursive / Markdown** 切片预览（`splitTextToIndexedChunks`） |
-| Token | `js-tiktoken`（`o200k_base`） | `lib/rag-tokens.ts` · `countTokens`，切片统计与对话区 **o200k** 计数 |
-| Markdown | `react-markdown@10` | 流式正文渲染（自定义 `components` 基础样式） |
-| 其它 | `zod`、`zustand`、`immer` | 已列入依赖，可按功能逐步使用 |
+| 类别       | 依赖                                          | 用途                                                                                    |
+| ---------- | --------------------------------------------- | --------------------------------------------------------------------------------------- |
+| 框架       | `next@16`、`react@19`                         | App Router、RSC/客户端组件拆分                                                          |
+| UI         | `antd@6`、`@ant-design/icons`                 | 布局、表单、卡片、折叠等                                                                |
+| AI 对话 UI | `@ant-design/x`                               | `Sender`、`XProvider`（对话输入；需 **客户端 + 动态 `ssr: false`** 避免服务端渲染异常） |
+| RAG / 文本 | `@langchain/core`、`@langchain/textsplitters` | 与后端一致的 **Recursive / Markdown** 切片预览（`splitTextToIndexedChunks`）            |
+| Token      | `js-tiktoken`（`o200k_base`）                 | `lib/rag-tokens.ts` · `countTokens`，切片统计与对话区 **o200k** 计数                    |
+| Markdown   | `react-markdown@10`                           | 流式正文渲染（自定义 `components` 基础样式）                                            |
+| 其它       | `zod`、`zustand`、`immer`                     | 已列入依赖，可按功能逐步使用                                                            |
 
 **包管理**：推荐使用 **pnpm**（若本机 `npm install` 异常，可用 pnpm 安装依赖）。
 
@@ -64,14 +64,14 @@ my-app/
 
 ## 四、路由与页面职责
 
-| 路径 | 组件入口 | 说明 |
-|------|-----------|------|
-| `/` | `app/page.tsx` | 首页；可扩展导航至 RAG 相关页 |
-| `/rag` | `app/rag/page.tsx` | **文档入库**：粘贴或上传 `.txt`/`.md`，`POST /api/documents/ingest`；展示返回 `documentId`、`chunkCount`、`splitConfig` 等 |
-| `/rag` | `ChunkPreviewPanel` | **切片可视化**：LangChain **RecursiveCharacter / Markdown** 可调；顶部 **Alert** 提示 **入库参数已在后端写死**（1000/150/recursive）；条带图 + 折叠块预览 |
-| `/ragSearch` | `RagSearchLayout.tsx` | 左栏占位；中栏 **RAG 对话**；右栏 **search** 调试 |
-| `/ragSearch` | `RagChatPanel.tsx` | **Sender** 提交 → `postRagChatStream` → `consumeRagChatSse`；首包 **meta** 展示 **documentId / chunkIndex / score**；正文 **react-markdown**；推理折叠；**Card extra**：o200k **正文 / 推理 / 合计** token |
-| `/ragSearch` | `RagSearchPanel.tsx` | `POST /api/rag/search`，JSON 格式化输出 |
+| 路径         | 组件入口              | 说明                                                                                                                                                                                                       |
+| ------------ | --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/`          | `app/page.tsx`        | 首页；可扩展导航至 RAG 相关页                                                                                                                                                                              |
+| `/rag`       | `app/rag/page.tsx`    | **文档入库**：粘贴或上传 `.txt`/`.md`，`POST /api/documents/ingest`；展示返回 `documentId`、`chunkCount`、`splitConfig` 等                                                                                 |
+| `/rag`       | `ChunkPreviewPanel`   | **切片可视化**：LangChain **RecursiveCharacter / Markdown** 可调；顶部 **Alert** 提示 **入库参数已在后端写死**（1000/150/recursive）；条带图 + 折叠块预览                                                  |
+| `/ragSearch` | `RagSearchLayout.tsx` | 左栏占位；中栏 **RAG 对话**；右栏 **search** 调试                                                                                                                                                          |
+| `/ragSearch` | `RagChatPanel.tsx`    | **Sender** 提交 → `postRagChatStream` → `consumeRagChatSse`；首包 **meta** 展示 **documentId / chunkIndex / score**；正文 **react-markdown**；推理折叠；**Card extra**：o200k **正文 / 推理 / 合计** token |
+| `/ragSearch` | `RagSearchPanel.tsx`  | `POST /api/rag/search`，JSON 格式化输出                                                                                                                                                                    |
 
 **SSR 说明**：`RagChatPanel` 经 `next/dynamic(..., { ssr: false })` 在 **`RagSearchLayout`（客户端组件）** 中加载，以满足 `@ant-design/x` 在浏览器侧的运行要求（Next 16 不允许在 **Server Component** 里对 `dynamic` 使用 `ssr: false`）。
 
@@ -79,11 +79,11 @@ my-app/
 
 ## 五、环境变量
 
-| 变量 | 含义 | 示例 |
-|------|------|------|
-| `NEXT_PUBLIC_API_URL` | 后端 **Origin**，**无**末尾斜杠 | `http://localhost:3010` |
+| 变量                  | 含义                            | 示例                    |
+| --------------------- | ------------------------------- | ----------------------- |
+| `NEXT_PUBLIC_API_URL` | 后端 **Origin**，**无**末尾斜杠 | `http://localhost:3025` |
 
-未设置时，代码内默认 `http://localhost:3010`，与 Nest 默认端口一致。
+未设置时，代码内默认 `http://localhost:3025`，与 Nest 默认端口一致。
 
 ---
 
@@ -91,11 +91,11 @@ my-app/
 
 所有业务路径相对于 Origin，且带全局前缀 **`/api`**：
 
-| 方法 | 路径常量 | 说明 |
-|------|-----------|------|
-| `postDocumentsIngest` | `/api/documents/ingest` | JSON：`text`、`filename?` |
-| `postRagSearch` | `/api/rag/search` | JSON：`query`、`topK?`、`documentId?` |
-| `postRagChatStream` | `/api/rag/chat` | JSON：`message`、`topK?`、`documentId?`；返回 **`text/event-stream`**；支持 **`RequestInit.signal`** 中止 |
+| 方法                  | 路径常量                | 说明                                                                                                      |
+| --------------------- | ----------------------- | --------------------------------------------------------------------------------------------------------- |
+| `postDocumentsIngest` | `/api/documents/ingest` | JSON：`text`、`filename?`                                                                                 |
+| `postRagSearch`       | `/api/rag/search`       | JSON：`query`、`topK?`、`documentId?`                                                                     |
+| `postRagChatStream`   | `/api/rag/chat`         | JSON：`message`、`topK?`、`documentId?`；返回 **`text/event-stream`**；支持 **`RequestInit.signal`** 中止 |
 
 ---
 
@@ -137,4 +137,4 @@ pnpm run build    # 生产构建
 
 ---
 
-*本文档随功能迭代更新；重大变更请同步修改本节与「全栈里程碑摘要」。*
+_本文档随功能迭代更新；重大变更请同步修改本节与「全栈里程碑摘要」。_

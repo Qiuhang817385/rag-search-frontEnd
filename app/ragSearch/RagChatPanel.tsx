@@ -1,7 +1,7 @@
 'use client'
 
 import { Sender, Think, XProvider } from '@ant-design/x'
-import { Alert, Card, Input, Space, Tag, Typography } from 'antd'
+import { Alert, Button, Card, Input, Space, Tag, Typography } from 'antd'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { Components } from 'react-markdown'
 import ReactMarkdown from 'react-markdown'
@@ -11,6 +11,7 @@ import {
   type RagSseMetaEvent,
   type RagSseParsed,
 } from '@/lib/rag-sse-parse'
+import { matchCitationsToAnswer } from '@/lib/rag-citation-match'
 import { countTokens } from '@/lib/rag-tokens'
 
 const { Text } = Typography
@@ -183,12 +184,24 @@ export default function RagChatPanel() {
 
   const metaSummary =
     meta &&
-    `检索维度 ${meta.dimensions} · 比对块 ${meta.totalChunksCompared} · 命中 ${meta.hitCount}`
+    [
+      meta.filterDocumentId && meta.filterDocumentName
+        ? `限定文档 ${meta.filterDocumentName}`
+        : null,
+      `检索维度 ${meta.dimensions} · 比对块 ${meta.totalChunksCompared} · 命中 ${meta.hitCount}`,
+    ]
+      .filter(Boolean)
+      .join(' · ')
 
   const answerTokenCount = useMemo(() => countTokens(answerMd), [answerMd])
   const reasoningTokenCount = useMemo(
     () => countTokens(reasoningMd),
     [reasoningMd],
+  )
+
+  const citationMatches = useMemo(
+    () => matchCitationsToAnswer(answerMd, meta?.hits ?? []),
+    [answerMd, meta?.hits],
   )
 
   return (
@@ -222,35 +235,6 @@ export default function RagChatPanel() {
           </Card>
         )}
 
-        {meta && (
-          <Card size="small" title="引用来源（meta.hits）">
-            <Text type="secondary" className="mb-2 block text-xs">
-              documentId · chunkIndex · score
-            </Text>
-            {meta.hits.length === 0 ? (
-              <Text type="secondary">本轮检索无命中块</Text>
-            ) : (
-              <Space wrap>
-                {meta.hits.map((h) => (
-                  <Tag key={h.chunkId} color="blue">
-                    doc{' '}
-                    <Typography.Text copyable className="text-xs">
-                      {h.documentId}
-                    </Typography.Text>
-                    {' · '}
-                    chunk #{h.chunkIndex} · {h.score.toFixed(4)}
-                  </Tag>
-                ))}
-              </Space>
-            )}
-            {metaSummary && (
-              <Text type="secondary" className="mt-2 block text-xs">
-                {metaSummary}
-              </Text>
-            )}
-          </Card>
-        )}
-
         {error && (
           <Alert type="error" message={error} showIcon className="w-full" />
         )}
@@ -278,6 +262,12 @@ export default function RagChatPanel() {
               </Space>
             }
           >
+            {meta ? (
+              <Text type="secondary" className="mb-2 block text-xs">
+                {metaSummary ?? ''}
+              </Text>
+            ) : null}
+
             {reasoningMd || (!reasoningComplete && loading) ? (
               <Think
                 className="mb-3"
@@ -299,6 +289,44 @@ export default function RagChatPanel() {
                 )}
               </Think>
             ) : null}
+
+            {meta && meta.hits.length > 0 ? (
+              <div className="mb-3">
+                <Text type="secondary" className="mb-1.5 block text-xs">
+                  引用来源（与已生成正文做 trigram 重叠匹配；若模型写出「片段
+                  n」等哨兵也会点亮）
+                </Text>
+                <Space wrap size="small">
+                  {meta.hits.map((h, idx) => {
+                    const m = citationMatches.get(h.chunkId)
+                    const active = m?.active ?? false
+                    const tip = m
+                      ? `重叠 ${(m.overlapScore * 100).toFixed(1)}%${m.fromSentinel ? ' · 哨兵' : ''}`
+                      : ''
+                    return (
+                      <Button
+                        key={h.chunkId}
+                        size="small"
+                        type={active ? 'primary' : 'default'}
+                        title={tip}
+                      >
+                        [{idx + 1}]{' '}
+                        {h.documentName ? `${h.documentName} · ` : null}
+                        <Typography.Text copyable className="text-xs">
+                          {h.documentId}
+                        </Typography.Text>
+                        {' · '}#{h.chunkIndex} · sim {h.score.toFixed(3)}
+                      </Button>
+                    )
+                  })}
+                </Space>
+              </div>
+            ) : meta && meta.hits.length === 0 ? (
+              <Text type="secondary" className="mb-3 block text-xs">
+                本轮检索无命中片段
+              </Text>
+            ) : null}
+
             <div className="max-w-none text-zinc-900 dark:text-zinc-100">
               {answerMd ? (
                 <ReactMarkdown components={mdComponents}>

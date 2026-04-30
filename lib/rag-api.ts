@@ -1,6 +1,6 @@
 /**
  * 与 Nest 后端约定：`main.ts` 里 `setGlobalPrefix('api')`，故业务路径均以 `/api` 开头。
- * 环境变量：`NEXT_PUBLIC_API_URL` = 仅 origin（无末尾 `/`），例如 `http://localhost:3010`
+ * 环境变量：`NEXT_PUBLIC_API_URL` = 仅 origin（无末尾 `/`），例如 `http://localhost:3025`
  */
 
 /** 全局 REST 前缀（勿含尾部斜杠） */
@@ -21,7 +21,7 @@ export const ragEndpoints = {
 export function getBackendOrigin(): string {
   return (
     process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ??
-    'http://localhost:3010'
+    'http://localhost:3025'
   )
 }
 
@@ -37,7 +37,9 @@ export type IngestRequestBody = {
   filename?: string
 }
 
-export async function postDocumentsIngest(body: IngestRequestBody): Promise<Response> {
+export async function postDocumentsIngest(
+  body: IngestRequestBody,
+): Promise<Response> {
   return fetch(backendUrl(ragEndpoints.documentsIngest), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -51,7 +53,9 @@ export type RagSearchRequestBody = {
   documentId?: string
 }
 
-export async function postRagSearch(body: RagSearchRequestBody): Promise<Response> {
+export async function postRagSearch(
+  body: RagSearchRequestBody,
+): Promise<Response> {
   return fetch(backendUrl(ragEndpoints.ragSearch), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },

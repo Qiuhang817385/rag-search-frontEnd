@@ -8,11 +8,17 @@ export type RagMetaHit = {
   documentId: string
   chunkIndex: number
   score: number
+  /** `rag_documents.filename`，缺失时与后端一致回退为 documentId */
+  documentName?: string
+  /** 检索片段正文；用于前端流式输出与 chunk 的词汇/字符重叠匹配 */
+  content?: string
 }
 
 export type RagSseMetaEvent = {
   type: 'meta'
   filterDocumentId: string | null
+  /** 限定检索时的文档展示名（filename，无则 id）；未限定时为 null */
+  filterDocumentName?: string | null
   dimensions: number
   totalChunksCompared: number
   hitCount: number
