@@ -2,7 +2,7 @@
 # 在服务器上：与 package.json 同目录，chmod +x deploy.sh
 # 环境变量（可选）：
 #   DEPLOY_BRANCH=main
-#   PM2_APP_NAME=my-app-web
+#   PM2_APP_NAME=rag-search
 #   PORT=3000
 # 构建前需能读到 NEXT_PUBLIC_*（见服务器 .env.production 或在下方 export）
 # 若用单独 Deploy Key 拉私库，取消下面 GIT_SSH_COMMAND 的注释并改路径
@@ -54,7 +54,7 @@ fi
 pnpm --version >&2 || true
 
 BRANCH="${DEPLOY_BRANCH:-main}"
-APP_NAME="${PM2_APP_NAME:-my-app-web}"
+APP_NAME="${PM2_APP_NAME:-rag-search}"
 PORT="${PORT:-3000}"
 NEXT_BIN="$(pwd)/node_modules/next/dist/bin/next"
 
