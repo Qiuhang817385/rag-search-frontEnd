@@ -1,6 +1,12 @@
 'use client'
 
-import { InboxOutlined, InfoCircleOutlined } from '@ant-design/icons'
+import {
+  CloudUploadOutlined,
+  DeleteOutlined,
+  DownloadOutlined,
+  InboxOutlined,
+  InfoCircleOutlined,
+} from '@ant-design/icons'
 import {
   Alert,
   App,
@@ -9,8 +15,10 @@ import {
   ConfigProvider,
   Descriptions,
   Input,
+  List,
   Space,
   Spin,
+  Tag,
   Tooltip,
   Typography,
   Upload,
@@ -19,11 +27,23 @@ import zhCN from 'antd/locale/zh_CN'
 import type { UploadProps } from 'antd'
 import { useCallback, useMemo, useState } from 'react'
 import {
+  deleteStorageObject,
   getBackendOrigin,
+  getPresignedDownloadUrl,
+  getPresignedUploadUrl,
   postDocumentsIngest,
   ragEndpoints,
+  StorageType,
 } from '@/lib/rag-api'
 import ChunkPreviewPanel from './ChunkPreviewPanel'
+
+type FileItem = {
+  key: string
+  filename: string
+  publicUrl: string
+  type: StorageType
+  size?: number
+}
 
 const { TextArea } = Input
 
@@ -50,6 +70,9 @@ function RagUploadInner() {
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [result, setResult] = useState<IngestSuccess | null>(null)
+  const [docList, setDocList] = useState<FileItem[]>([])
+  const [imageList, setImageList] = useState<FileItem[]>([])
+  const [uploadingType, setUploadingType] = useState<StorageType | null>(null)
 
   const apiBase = useMemo(() => getBackendOrigin(), [])
 
@@ -118,6 +141,157 @@ function RagUploadInner() {
     },
   }
 
+  // 上传文件到 R2
+  const handleR2Upload = useCallback(
+    async (file: File, type: StorageType) => {
+      setUploadingType(type)
+      try {
+        const { uploadUrl, key, publicUrl } = await getPresignedUploadUrl(
+          type,
+          file.name,
+          file.type || 'application/octet-stream',
+        )
+
+        // 浏览器直传 R2
+        const uploadRes = await fetch(uploadUrl, {
+          method: 'PUT',
+          headers: { 'Content-Type': file.type || 'application/octet-stream' },
+          body: file,
+        })
+
+        if (!uploadRes.ok) {
+          throw new Error(`上传失败: ${uploadRes.status}`)
+        }
+
+        const newItem: FileItem = {
+          key,
+          filename: file.name,
+          publicUrl,
+          type,
+          size: file.size,
+        }
+
+        if (type === 'doc') {
+          setDocList((prev) => [...prev, newItem])
+        } else {
+          setImageList((prev) => [...prev, newItem])
+        }
+
+        message.success(`${file.name} 上传成功`)
+      } catch (e) {
+        const err = e instanceof Error ? e.message : '上传失败'
+        message.error(err)
+      } finally {
+        setUploadingType(null)
+      }
+    },
+    [message],
+  )
+
+  // 从 R2 下载文件
+  const handleDownload = useCallback(
+    async (item: FileItem) => {
+      try {
+        const downloadUrl = await getPresignedDownloadUrl(item.type, item.key)
+        window.open(downloadUrl, '_blank')
+      } catch (e) {
+        const err = e instanceof Error ? e.message : '获取下载链接失败'
+        message.error(err)
+      }
+    },
+    [message],
+  )
+
+  // 从 R2 删除文件
+  const handleDelete = useCallback(
+    async (item: FileItem) => {
+      try {
+        await deleteStorageObject(item.type, item.key)
+        if (item.type === 'doc') {
+          setDocList((prev) => prev.filter((i) => i.key !== item.key))
+        } else {
+          setImageList((prev) => prev.filter((i) => i.key !== item.key))
+        }
+        message.success(`${item.filename} 已删除`)
+      } catch (e) {
+        const err = e instanceof Error ? e.message : '删除失败'
+        message.error(err)
+      }
+    },
+    [message],
+  )
+
+  const docUploadProps: UploadProps = {
+    name: 'file',
+    multiple: false,
+    accept: '.txt,.md,.pdf,.doc,.docx,.ppt,.pptx,.xls,.xlsx,text/plain,text/markdown,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-powerpoint,application/vnd.openxmlformats-officedocument.presentationml.presentation,application/vnd.ms-excel',
+    maxCount: 1,
+    showUploadList: false,
+    beforeUpload: (file) => {
+      handleR2Upload(file, 'doc')
+      return false
+    },
+  }
+
+  const imageUploadProps: UploadProps = {
+    name: 'file',
+    multiple: false,
+    accept: '.jpg,.jpeg,.png,.gif,.webp,.svg,.bmp,image/jpeg,image/png,image/gif,image/webp,image/svg+xml,image/bmp',
+    maxCount: 1,
+    showUploadList: false,
+    beforeUpload: (file) => {
+      handleR2Upload(file, 'image')
+      return false
+    },
+  }
+
+  const renderFileList = (list: FileItem[], type: StorageType) => (
+    <List
+      size="small"
+      dataSource={list}
+      locale={{ emptyText: '暂无文件' }}
+      renderItem={(item) => (
+        <List.Item
+          actions={[
+            <Button
+              key="download"
+              type="text"
+              icon={<DownloadOutlined />}
+              onClick={() => handleDownload(item)}
+            >
+              下载
+            </Button>,
+            <Button
+              key="delete"
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={() => handleDelete(item)}
+            >
+              删除
+            </Button>,
+          ]}
+        >
+          <List.Item.Meta
+            title={item.filename}
+            description={
+              <Space>
+                <Tag color={type === 'doc' ? 'blue' : 'green'}>
+                  {type === 'doc' ? '文档' : '图片'}
+                </Tag>
+                {item.size && (
+                  <Typography.Text type="secondary" className="text-xs">
+                    {(item.size / 1024).toFixed(1)} KB
+                  </Typography.Text>
+                )}
+              </Space>
+            }
+          />
+        </List.Item>
+      )}
+    />
+  )
+
   return (
     <div className="mx-auto max-w-5xl px-4 py-8">
       <Space orientation="vertical" size="large" className="w-full">
@@ -133,6 +307,45 @@ function RagUploadInner() {
             ，后端地址：{apiBase}
           </Typography.Text>
         </div>
+
+        {/* R2 文件管理 */}
+        <Card
+          title={
+            <Space>
+              <span>R2 存储</span>
+              <Tag color="orange">Cloudflare R2</Tag>
+            </Space>
+          }
+          extra={
+            <Space>
+              <Upload {...docUploadProps}>
+                <Button
+                  icon={<CloudUploadOutlined />}
+                  loading={uploadingType === 'doc'}
+                >
+                  上传文档
+                </Button>
+              </Upload>
+              <Upload {...imageUploadProps}>
+                <Button
+                  icon={<CloudUploadOutlined />}
+                  loading={uploadingType === 'image'}
+                >
+                  上传图片
+                </Button>
+              </Upload>
+            </Space>
+          }
+        >
+          <Space orientation="vertical" size="middle" className="w-full">
+            <Card size="small" title="文档列表">
+              {renderFileList(docList, 'doc')}
+            </Card>
+            <Card size="small" title="图片列表">
+              {renderFileList(imageList, 'image')}
+            </Card>
+          </Space>
+        </Card>
 
         <Card title="文档内容">
           <Space orientation="vertical" size="middle" className="w-full">

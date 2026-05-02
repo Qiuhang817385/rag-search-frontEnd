@@ -31,6 +31,80 @@ export function backendUrl(pathname: string): string {
   return `${getBackendOrigin()}${p}`
 }
 
+/** R2 存储相关接口 */
+export const storageEndpoints = {
+  docPresignUpload: `${BACKEND_API_PREFIX}/storage/doc/presign-upload`,
+  docPresignDownload: `${BACKEND_API_PREFIX}/storage/doc/presign-download`,
+  imagePresignUpload: `${BACKEND_API_PREFIX}/storage/image/presign-upload`,
+  imagePresignDownload: `${BACKEND_API_PREFIX}/storage/image/presign-download`,
+  docDelete: `${BACKEND_API_PREFIX}/storage/doc/delete`,
+  imageDelete: `${BACKEND_API_PREFIX}/storage/image/delete`,
+} as const
+
+export type StorageType = 'doc' | 'image'
+
+export type PresignUploadRequest = {
+  filename: string
+  contentType: string
+}
+
+export type PresignUploadResponse = {
+  uploadUrl: string
+  key: string
+  publicUrl: string
+}
+
+export type PresignDownloadResponse = {
+  downloadUrl: string
+}
+
+export type StorageDeleteRequest = {
+  key: string
+}
+
+export async function getPresignedUploadUrl(
+  type: StorageType,
+  filename: string,
+  contentType: string,
+): Promise<PresignUploadResponse> {
+  const endpoint = type === 'doc' ? storageEndpoints.docPresignUpload : storageEndpoints.imagePresignUpload
+  const res = await fetch(backendUrl(endpoint), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ filename, contentType } satisfies PresignUploadRequest),
+  })
+  if (!res.ok) throw new Error(`获取上传链接失败: ${res.status}`)
+  return res.json()
+}
+
+export async function getPresignedDownloadUrl(
+  type: StorageType,
+  key: string,
+): Promise<string> {
+  const endpoint = type === 'doc' ? storageEndpoints.docPresignDownload : storageEndpoints.imagePresignDownload
+  const res = await fetch(backendUrl(endpoint), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key } satisfies StorageDeleteRequest),
+  })
+  if (!res.ok) throw new Error(`获取下载链接失败: ${res.status}`)
+  const data = await res.json()
+  return data.downloadUrl
+}
+
+export async function deleteStorageObject(
+  type: StorageType,
+  key: string,
+): Promise<void> {
+  const endpoint = type === 'doc' ? storageEndpoints.docDelete : storageEndpoints.imageDelete
+  const res = await fetch(backendUrl(endpoint), {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ key } satisfies StorageDeleteRequest),
+  })
+  if (!res.ok) throw new Error(`删除失败: ${res.status}`)
+}
+
 /** 文档入库请求体（与 `back_end` IngestRequestDto 一致） */
 export type IngestRequestBody = {
   text: string

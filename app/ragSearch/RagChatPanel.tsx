@@ -4,7 +4,13 @@ import { Sender, Think, XProvider } from '@ant-design/x'
 import { Alert, Button, Card, Input, Space, Tag, Typography } from 'antd'
 import { useCallback, useMemo, useRef, useState } from 'react'
 import type { Components } from 'react-markdown'
+import { Streamdown } from 'streamdown'
 import ReactMarkdown from 'react-markdown'
+import { createCodePlugin } from '@streamdown/code'
+import { mermaid } from '@streamdown/mermaid'
+import { math } from '@streamdown/math'
+import { cjk } from '@streamdown/cjk'
+
 import { postRagChatStream } from '@/lib/rag-api'
 import {
   consumeRagChatSse,
@@ -70,6 +76,7 @@ export default function RagChatPanel() {
   const [lastQuestion, setLastQuestion] = useState('')
   const [answerMd, setAnswerMd] = useState('')
   const [reasoningMd, setReasoningMd] = useState('')
+
   /** 推理阶段是否结束（首个正文 token / done / error） */
   const [reasoningComplete, setReasoningComplete] = useState(true)
   /** Think 展开：推理结束后自动折叠，用户仍可手动展开 */
@@ -204,142 +211,181 @@ export default function RagChatPanel() {
     [answerMd, meta?.hits],
   )
 
+  /**
+   * Streamdown 在挂载了 `plugins.code` 时，上下文里的高亮主题来自
+   * `code.getThemes()`，不会采用 `<Streamdown shikiTheme={...} />`，
+   * 必须通过 createCodePlugin({ themes }) 切换。
+   */
+  const codePlugin = createCodePlugin({
+    themes: ['github-light', 'github-dark'],
+  })
+
+  const streamdownPlugins = useMemo(
+    () => ({ code: codePlugin, mermaid, math, cjk }),
+    [codePlugin],
+  )
+
   return (
     <XProvider>
-      <Typography.Title level={4} className="mb-3!">
-        RAG 对话（SSE）
-      </Typography.Title>
-      <Text type="secondary" className="mb-4 block text-sm">
-        POST /api/rag/chat · @ant-design/x Sender · ReadableStream 解析 SSE ·
-        react-markdown 增量渲染
-      </Text>
+      <div className="w-full relative h-[calc(100vh-120px)]">
+        <Typography.Title level={4} className="mb-3!">
+          RAG 对话（SSE）
+        </Typography.Title>
+        <Text type="secondary" className="mb-4 block text-sm">
+          POST /api/rag/chat · @ant-design/x Sender · ReadableStream 解析 SSE ·
+          react-markdown 增量渲染
+        </Text>
 
-      <Space orientation="vertical" size="middle" className="w-full">
-        <Space wrap align="center" className="w-full">
-          <Text type="secondary" className="text-xs">
-            限定文档（可选）
-          </Text>
-          <Input
-            placeholder="documentId，留空则全库检索"
-            value={documentIdFilter}
-            onChange={(e) => setDocumentIdFilter(e.target.value)}
-            style={{ maxWidth: 360 }}
-            allowClear
-            className="font-mono text-sm"
-          />
+        <Space
+          orientation="vertical"
+          size="middle"
+          className="w-full pb-[calc(5.5rem+env(safe-area-inset-bottom,0))] relative"
+        >
+          <Space wrap align="center" className="w-full">
+            <Text type="secondary" className="text-xs">
+              限定文档（可选）
+            </Text>
+            <Input
+              placeholder="documentId，留空则全库检索"
+              value={documentIdFilter}
+              onChange={(e) => setDocumentIdFilter(e.target.value)}
+              style={{ maxWidth: 360 }}
+              allowClear
+              className="font-mono text-sm"
+            />
+          </Space>
+
+          {lastQuestion && (
+            <Card size="small" title="你的问题" className="right">
+              <Text>{lastQuestion}</Text>
+            </Card>
+          )}
+
+          {error && (
+            <Alert type="error" message={error} showIcon className="w-full" />
+          )}
+
+          {(answerMd || reasoningMd || loading) && (
+            <Card
+              size="small"
+              title="模型回复"
+              extra={
+                <Space size={4} wrap className="items-center">
+                  <Text type="secondary" className="text-xs">
+                    token:
+                  </Text>
+                  {reasoningMd ? (
+                    <Tag className="m-0">推理 {reasoningTokenCount}</Tag>
+                  ) : null}
+                  <Tag color="blue" className="m-0">
+                    正文 {answerTokenCount}
+                  </Tag>
+                  {reasoningMd && (answerMd || loading) ? (
+                    <Tag className="m-0">
+                      合计 {reasoningTokenCount + answerTokenCount}
+                    </Tag>
+                  ) : null}
+                </Space>
+              }
+            >
+              {meta ? (
+                <Text type="secondary" className="mb-2 block text-xs">
+                  {metaSummary ?? ''}
+                </Text>
+              ) : null}
+
+              {reasoningMd || (!reasoningComplete && loading) ? (
+                <Think
+                  className="mb-3"
+                  title={`推理过程 · token: ${reasoningTokenCount}`}
+                  loading={!reasoningComplete && loading}
+                  expanded={thinkExpanded}
+                  onExpand={setThinkExpanded}
+                >
+                  {reasoningMd ? (
+                    <div
+                      className={`max-h-40 overflow-auto text-xs text-zinc-600 dark:text-zinc-400 [&_.mb-2]:mb-1  `}
+                    >
+                      {/* <ReactMarkdown components={mdComponents}>
+                      {reasoningMd}
+                    </ReactMarkdown> */}
+                      <Streamdown
+                        className="rag-streamdown rag-streamdown--compact"
+                        animated
+                        plugins={streamdownPlugins}
+                        isAnimating={thinkExpanded}
+                      >
+                        {reasoningMd}
+                      </Streamdown>
+                    </div>
+                  ) : (
+                    <Text type="secondary" className="text-xs">
+                      等待推理内容…
+                    </Text>
+                  )}
+                </Think>
+              ) : null}
+
+              {meta && meta.hits.length > 0 ? (
+                <div className="mb-3">
+                  <Text type="secondary" className="mb-1.5 block text-xs">
+                    引用来源（与已生成正文做 trigram 重叠匹配；若模型写出「片段
+                    n」等哨兵也会点亮）
+                  </Text>
+                  <Space wrap size="small">
+                    {meta.hits.map((h, idx) => {
+                      const m = citationMatches.get(h.chunkId)
+                      const active = m?.active ?? false
+                      const tip = m
+                        ? `重叠 ${(m.overlapScore * 100).toFixed(1)}%${m.fromSentinel ? ' · 哨兵' : ''}`
+                        : ''
+                      return (
+                        <Button
+                          key={h.chunkId}
+                          size="small"
+                          type={active ? 'primary' : 'default'}
+                          title={tip}
+                        >
+                          [{idx + 1}]{' '}
+                          {h.documentName ? `${h.documentName} · ` : null}
+                          <Typography.Text copyable className="text-xs">
+                            {h.documentId}
+                          </Typography.Text>
+                          {' · '}#{h.chunkIndex} · sim {h.score.toFixed(3)}
+                        </Button>
+                      )
+                    })}
+                  </Space>
+                </div>
+              ) : meta && meta.hits.length === 0 ? (
+                <Text type="secondary" className="mb-3 block text-xs">
+                  本轮检索无命中片段
+                </Text>
+              ) : null}
+
+              {/* 回答 */}
+              <div className={`max-w-none text-zinc-900 dark:text-zinc-100  `}>
+                {answerMd ? (
+                  // <ReactMarkdown components={mdComponents}>
+                  //   {answerMd}
+                  // </ReactMarkdown>
+                  <Streamdown
+                    className="rag-streamdown"
+                    animated
+                    plugins={streamdownPlugins}
+                    isAnimating={loading}
+                  >
+                    {answerMd}
+                  </Streamdown>
+                ) : loading ? (
+                  <Text type="secondary">等待正文 token…</Text>
+                ) : null}
+              </div>
+            </Card>
+          )}
         </Space>
 
-        {lastQuestion && (
-          <Card size="small" title="你的问题">
-            <Text>{lastQuestion}</Text>
-          </Card>
-        )}
-
-        {error && (
-          <Alert type="error" message={error} showIcon className="w-full" />
-        )}
-
-        {(answerMd || reasoningMd || loading) && (
-          <Card
-            size="small"
-            title="模型回复"
-            extra={
-              <Space size={4} wrap className="items-center">
-                <Text type="secondary" className="text-xs">
-                  token:
-                </Text>
-                {reasoningMd ? (
-                  <Tag className="m-0">推理 {reasoningTokenCount}</Tag>
-                ) : null}
-                <Tag color="blue" className="m-0">
-                  正文 {answerTokenCount}
-                </Tag>
-                {reasoningMd && (answerMd || loading) ? (
-                  <Tag className="m-0">
-                    合计 {reasoningTokenCount + answerTokenCount}
-                  </Tag>
-                ) : null}
-              </Space>
-            }
-          >
-            {meta ? (
-              <Text type="secondary" className="mb-2 block text-xs">
-                {metaSummary ?? ''}
-              </Text>
-            ) : null}
-
-            {reasoningMd || (!reasoningComplete && loading) ? (
-              <Think
-                className="mb-3"
-                title={`推理过程 · token: ${reasoningTokenCount}`}
-                loading={!reasoningComplete && loading}
-                expanded={thinkExpanded}
-                onExpand={setThinkExpanded}
-              >
-                {reasoningMd ? (
-                  <div className="max-h-40 overflow-auto text-xs text-zinc-600 dark:text-zinc-400 [&_.mb-2]:mb-1">
-                    <ReactMarkdown components={mdComponents}>
-                      {reasoningMd}
-                    </ReactMarkdown>
-                  </div>
-                ) : (
-                  <Text type="secondary" className="text-xs">
-                    等待推理内容…
-                  </Text>
-                )}
-              </Think>
-            ) : null}
-
-            {meta && meta.hits.length > 0 ? (
-              <div className="mb-3">
-                <Text type="secondary" className="mb-1.5 block text-xs">
-                  引用来源（与已生成正文做 trigram 重叠匹配；若模型写出「片段
-                  n」等哨兵也会点亮）
-                </Text>
-                <Space wrap size="small">
-                  {meta.hits.map((h, idx) => {
-                    const m = citationMatches.get(h.chunkId)
-                    const active = m?.active ?? false
-                    const tip = m
-                      ? `重叠 ${(m.overlapScore * 100).toFixed(1)}%${m.fromSentinel ? ' · 哨兵' : ''}`
-                      : ''
-                    return (
-                      <Button
-                        key={h.chunkId}
-                        size="small"
-                        type={active ? 'primary' : 'default'}
-                        title={tip}
-                      >
-                        [{idx + 1}]{' '}
-                        {h.documentName ? `${h.documentName} · ` : null}
-                        <Typography.Text copyable className="text-xs">
-                          {h.documentId}
-                        </Typography.Text>
-                        {' · '}#{h.chunkIndex} · sim {h.score.toFixed(3)}
-                      </Button>
-                    )
-                  })}
-                </Space>
-              </div>
-            ) : meta && meta.hits.length === 0 ? (
-              <Text type="secondary" className="mb-3 block text-xs">
-                本轮检索无命中片段
-              </Text>
-            ) : null}
-
-            <div className="max-w-none text-zinc-900 dark:text-zinc-100">
-              {answerMd ? (
-                <ReactMarkdown components={mdComponents}>
-                  {answerMd}
-                </ReactMarkdown>
-              ) : loading ? (
-                <Text type="secondary">等待正文 token…</Text>
-              ) : null}
-            </div>
-          </Card>
-        )}
-
-        <div className="rounded-lg border border-zinc-200 p-1 dark:border-zinc-700">
+        <div className="fixed w-[50%] left-1/2   -translate-x-1/2 bottom-[16px] z-10 rounded-lg border border-zinc-200 bg-background p-1 shadow-[0_-4px_14px_color-mix(in_oklch,var(--foreground)_6%,transparent)] dark:border-zinc-700">
           <Sender
             value={senderValue}
             onChange={(v) => setSenderValue(v)}
@@ -350,7 +396,7 @@ export default function RagChatPanel() {
             autoSize={{ minRows: 2, maxRows: 8 }}
           />
         </div>
-      </Space>
+      </div>
     </XProvider>
   )
 }
