@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState } from 'react'
+import { startTransition, useActionState } from 'react'
 import {
   Alert,
   Button,
@@ -31,7 +31,9 @@ export default function RegisterPage() {
     fd.set('password', values.password)
     const name = values.name?.trim()
     if (name) fd.set('name', name)
-    formAction(fd)
+    startTransition(() => {
+      formAction(fd)
+    })
   }
 
   return (

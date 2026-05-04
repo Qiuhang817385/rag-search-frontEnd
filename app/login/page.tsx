@@ -1,7 +1,7 @@
 'use client'
 
 import Link from 'next/link'
-import { useActionState } from 'react'
+import { startTransition, useActionState } from 'react'
 import { Alert, Button, ConfigProvider, Form, Input, Typography } from 'antd'
 import zhCN from 'antd/locale/zh_CN'
 import { login } from '@/app/actions/auth'
@@ -20,7 +20,9 @@ export default function LoginPage() {
     const fd = new FormData()
     fd.set('email', values.email.trim())
     fd.set('password', values.password)
-    formAction(fd)
+    startTransition(() => {
+      formAction(fd)
+    })
   }
 
   return (
