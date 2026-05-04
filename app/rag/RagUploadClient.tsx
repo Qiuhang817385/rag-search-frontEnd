@@ -26,9 +26,9 @@ import {
 import zhCN from 'antd/locale/zh_CN'
 import type { UploadProps } from 'antd'
 import { useCallback, useMemo, useState } from 'react'
+import { getBackendOrigin } from '@/lib/backend-url'
 import {
   deleteStorageObject,
-  getBackendOrigin,
   getPresignedDownloadUrl,
   getPresignedUploadUrl,
   postDocumentsIngest,

@@ -1,8 +1,17 @@
 'use client'
 
-import { Col, ConfigProvider, Row, Select, theme as antdTheme } from 'antd'
+import {
+  Button,
+  Col,
+  ConfigProvider,
+  Row,
+  Select,
+  Space,
+  theme as antdTheme,
+} from 'antd'
+import Link from 'next/link'
 import { useEffect, useState } from 'react'
-
+import { logout } from '../actions/auth'
 const STORAGE_KEY = 'theme'
 
 /** 与 globals.css：`@custom-variant dark (&:where([data-theme=dark], …))` 同源 */
@@ -70,21 +79,28 @@ export default function RootLayout({
       <Row>
         <Col span={24}>
           <div className="flex justify-end p-2">
-            <Select
-              value={theme}
-              style={{ minWidth: 140 }}
-              onChange={(value) => {
-                setTheme(value)
-                localStorage.setItem(STORAGE_KEY, value)
-                paintDocumentTheme(value)
-                setDocIsDark(readThemeIsDarkFromDom())
-              }}
-              options={[
-                { label: 'Light', value: 'light' },
-                { label: 'Dark', value: 'dark' },
-                { label: 'System', value: 'system' },
-              ]}
-            />
+            <Space>
+              <Select
+                value={theme}
+                style={{ minWidth: 140 }}
+                onChange={(value) => {
+                  setTheme(value)
+                  localStorage.setItem(STORAGE_KEY, value)
+                  paintDocumentTheme(value)
+                  setDocIsDark(readThemeIsDarkFromDom())
+                }}
+                options={[
+                  { label: 'Light', value: 'light' },
+                  { label: 'Dark', value: 'dark' },
+                  { label: 'System', value: 'system' },
+                ]}
+              />
+              <div>
+                <Button type="primary" onClick={logout}>
+                  Log out
+                </Button>
+              </div>
+            </Space>
           </div>
         </Col>
         <Col span={24}>{children}</Col>

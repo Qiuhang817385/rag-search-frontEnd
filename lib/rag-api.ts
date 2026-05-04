@@ -1,37 +1,45 @@
 /**
- * 与 Nest 后端约定：`main.ts` 里 `setGlobalPrefix('api')`，故业务路径均以 `/api` 开头。
- * 环境变量：`NEXT_PUBLIC_API_URL` = 仅 origin（无末尾 `/`），例如 `http://localhost:3025`
+ * RAG / 存储等业务 API。浏览器端经 `nestBffPath` 走 Next BFF，以携带 `session_id`。
+ * 环境变量：`NEXT_PUBLIC_API_URL` = Nest 的 origin（无末尾 `/`）。
  */
 
-/** 全局 REST 前缀（勿含尾部斜杠） */
-export const BACKEND_API_PREFIX = '/api'
+import {
+  BACKEND_API_PREFIX,
+  getBackendOrigin,
+  nestBffPath,
+} from '@/lib/backend-url'
 
-/** 各模块路径（pathname，不含 origin） */
+export { BACKEND_API_PREFIX, getBackendOrigin, nestBffPath } from '@/lib/backend-url'
+
+function assertClient(label: string) {
+  if (typeof window === 'undefined') {
+    throw new Error(
+      `${label} 仅能在浏览器调用；请在 Server Action / RSC 中使用 dal.fetchAPI 或 fetchBackendRaw。`,
+    )
+  }
+}
+
+/** 经 BFF 转发到 Nest（自动携带 Cookie） */
+function bffFetch(apiPath: string, init: RequestInit = {}): Promise<Response> {
+  assertClient('bffFetch')
+  return fetch(nestBffPath(apiPath), {
+    credentials: 'include',
+    ...init,
+    headers: {
+      'Content-Type': 'application/json',
+      ...(init.headers || {}),
+    },
+  })
+}
+
+/** 各模块路径（pathname，含 `/api`） */
 export const ragEndpoints = {
-  /** POST body: { text: string, filename?: string } → 切片 + embedding 入库 */
   documentsIngest: `${BACKEND_API_PREFIX}/documents/ingest`,
-  /** POST body: { text: string } → { embedding, dimensions, model } */
   embedding: `${BACKEND_API_PREFIX}/embedding`,
-  /** POST body: { query, topK?, documentId? } → 向量检索 top 相似块 */
   ragSearch: `${BACKEND_API_PREFIX}/rag/search`,
-  /** POST SSE：`text/event-stream`，body `{ message, topK?, documentId? }` */
   ragChatStream: `${BACKEND_API_PREFIX}/rag/chat`,
 } as const
 
-export function getBackendOrigin(): string {
-  return (
-    process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, '') ??
-    'http://localhost:3025'
-  )
-}
-
-/** 拼完整请求 URL */
-export function backendUrl(pathname: string): string {
-  const p = pathname.startsWith('/') ? pathname : `/${pathname}`
-  return `${getBackendOrigin()}${p}`
-}
-
-/** R2 存储相关接口 */
 export const storageEndpoints = {
   docPresignUpload: `${BACKEND_API_PREFIX}/storage/doc/presign-upload`,
   docPresignDownload: `${BACKEND_API_PREFIX}/storage/doc/presign-download`,
@@ -67,11 +75,16 @@ export async function getPresignedUploadUrl(
   filename: string,
   contentType: string,
 ): Promise<PresignUploadResponse> {
-  const endpoint = type === 'doc' ? storageEndpoints.docPresignUpload : storageEndpoints.imagePresignUpload
-  const res = await fetch(backendUrl(endpoint), {
+  const endpoint =
+    type === 'doc'
+      ? storageEndpoints.docPresignUpload
+      : storageEndpoints.imagePresignUpload
+  const res = await bffFetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ filename, contentType } satisfies PresignUploadRequest),
+    body: JSON.stringify({
+      filename,
+      contentType,
+    } satisfies PresignUploadRequest),
   })
   if (!res.ok) throw new Error(`获取上传链接失败: ${res.status}`)
   return res.json()
@@ -81,14 +94,16 @@ export async function getPresignedDownloadUrl(
   type: StorageType,
   key: string,
 ): Promise<string> {
-  const endpoint = type === 'doc' ? storageEndpoints.docPresignDownload : storageEndpoints.imagePresignDownload
-  const res = await fetch(backendUrl(endpoint), {
+  const endpoint =
+    type === 'doc'
+      ? storageEndpoints.docPresignDownload
+      : storageEndpoints.imagePresignDownload
+  const res = await bffFetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key } satisfies StorageDeleteRequest),
   })
   if (!res.ok) throw new Error(`获取下载链接失败: ${res.status}`)
-  const data = await res.json()
+  const data = (await res.json()) as PresignDownloadResponse
   return data.downloadUrl
 }
 
@@ -96,16 +111,15 @@ export async function deleteStorageObject(
   type: StorageType,
   key: string,
 ): Promise<void> {
-  const endpoint = type === 'doc' ? storageEndpoints.docDelete : storageEndpoints.imageDelete
-  const res = await fetch(backendUrl(endpoint), {
+  const endpoint =
+    type === 'doc' ? storageEndpoints.docDelete : storageEndpoints.imageDelete
+  const res = await bffFetch(endpoint, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ key } satisfies StorageDeleteRequest),
   })
   if (!res.ok) throw new Error(`删除失败: ${res.status}`)
 }
 
-/** 文档入库请求体（与 `back_end` IngestRequestDto 一致） */
 export type IngestRequestBody = {
   text: string
   filename?: string
@@ -114,9 +128,8 @@ export type IngestRequestBody = {
 export async function postDocumentsIngest(
   body: IngestRequestBody,
 ): Promise<Response> {
-  return fetch(backendUrl(ragEndpoints.documentsIngest), {
+  return bffFetch(ragEndpoints.documentsIngest, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 }
@@ -130,9 +143,8 @@ export type RagSearchRequestBody = {
 export async function postRagSearch(
   body: RagSearchRequestBody,
 ): Promise<Response> {
-  return fetch(backendUrl(ragEndpoints.ragSearch), {
+  return bffFetch(ragEndpoints.ragSearch, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
 }
@@ -143,15 +155,16 @@ export type RagChatRequestBody = {
   documentId?: string
 }
 
-/** RAG 对话流（SSE），需自行解析 response.body ReadableStream；可传 signal 中止 */
 export function postRagChatStream(
   body: RagChatRequestBody,
   init?: RequestInit,
 ): Promise<Response> {
-  return fetch(backendUrl(ragEndpoints.ragChatStream), {
+  assertClient('postRagChatStream')
+  return fetch(nestBffPath(ragEndpoints.ragChatStream), {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', ...init?.headers },
     body: JSON.stringify(body),
+    credentials: 'include',
     ...init,
   })
 }

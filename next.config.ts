@@ -8,6 +8,7 @@ const nextConfig: NextConfig = {
       bundler: 'turbopack',
     }),
   },
+  skipProxyUrlNormalize: true,
 }
 
 export default nextConfig

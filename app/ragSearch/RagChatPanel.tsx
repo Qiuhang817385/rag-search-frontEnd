@@ -1,11 +1,15 @@
 'use client'
 
-import { Sender, Think, XProvider } from '@ant-design/x'
-import { Alert, Button, Card, Input, Space, Tag, Typography } from 'antd'
+import {
+  Bubble,
+  type BubbleItemType,
+  Sender,
+  Think,
+  XProvider,
+} from '@ant-design/x'
+import { Alert, Button, Input, Space, Tag, Typography } from 'antd'
 import { useCallback, useMemo, useRef, useState } from 'react'
-import type { Components } from 'react-markdown'
 import { Streamdown } from 'streamdown'
-import ReactMarkdown from 'react-markdown'
 import { createCodePlugin } from '@streamdown/code'
 import { mermaid } from '@streamdown/mermaid'
 import { math } from '@streamdown/math'
@@ -22,52 +26,126 @@ import { countTokens } from '@/lib/rag-tokens'
 
 const { Text } = Typography
 
-const mdComponents: Components = {
-  p: ({ children }) => (
-    <p className="mb-2 whitespace-pre-wrap last:mb-0">{children}</p>
-  ),
-  ul: ({ children }) => <ul className="my-2 list-disc pl-5">{children}</ul>,
-  ol: ({ children }) => <ol className="my-2 list-decimal pl-5">{children}</ol>,
-  li: ({ children }) => <li className="mb-1">{children}</li>,
-  pre: ({ children }) => (
-    <pre className="my-2 overflow-x-auto rounded-md bg-zinc-900/90 p-3 text-sm text-zinc-100 [&>code]:bg-transparent [&>code]:p-0">
-      {children}
-    </pre>
-  ),
-  code: ({ className, children }) => {
-    if (className?.includes('language-')) {
-      return <code className={className}>{children}</code>
-    }
-    return (
-      <code className="rounded bg-zinc-200 px-1 font-mono text-[0.9em] dark:bg-zinc-700">
-        {children}
-      </code>
-    )
-  },
-  h1: ({ children }) => (
-    <h1 className="mb-2 mt-3 text-lg font-semibold first:mt-0">{children}</h1>
-  ),
-  h2: ({ children }) => (
-    <h2 className="mb-2 mt-3 text-base font-semibold first:mt-0">{children}</h2>
-  ),
-  h3: ({ children }) => (
-    <h3 className="mb-2 mt-2 text-sm font-semibold first:mt-0">{children}</h3>
-  ),
-  a: ({ href, children }) => (
-    <a
-      href={href}
-      className="text-blue-600 underline hover:text-blue-500 dark:text-blue-400"
-      target="_blank"
-      rel="noreferrer"
-    >
-      {children}
-    </a>
-  ),
-  blockquote: ({ children }) => (
-    <blockquote className="my-2 border-l-4 border-zinc-300 pl-3 text-zinc-600 dark:border-zinc-600 dark:text-zinc-400">
-      {children}
-    </blockquote>
-  ),
+type RagAssistantBubbleContentProps = {
+  meta: RagSseMetaEvent | null
+  metaSummary: string | null
+  reasoningMd: string
+  reasoningComplete: boolean
+  thinkExpanded: boolean
+  onThinkExpand: (v: boolean) => void
+  reasoningTokenCount: number
+  loading: boolean
+  streamdownPlugins: {
+    code: ReturnType<typeof createCodePlugin>
+    mermaid: typeof mermaid
+    math: typeof math
+    cjk: typeof cjk
+  }
+  citationMatches: ReturnType<typeof matchCitationsToAnswer>
+  answerMd: string
+}
+
+function RagAssistantBubbleContent({
+  meta,
+  metaSummary,
+  reasoningMd,
+  reasoningComplete,
+  thinkExpanded,
+  onThinkExpand,
+  reasoningTokenCount,
+  loading,
+  streamdownPlugins,
+  citationMatches,
+  answerMd,
+}: RagAssistantBubbleContentProps) {
+  return (
+    <div className="max-w-none text-left">
+      {meta ? (
+        <Text type="secondary" className="mb-2 block text-xs">
+          {metaSummary ?? ''}
+        </Text>
+      ) : null}
+
+      {reasoningMd || (!reasoningComplete && loading) ? (
+        <Think
+          className="mb-3"
+          title={`推理过程 · token: ${reasoningTokenCount}`}
+          loading={!reasoningComplete && loading}
+          expanded={thinkExpanded}
+          onExpand={onThinkExpand}
+        >
+          {reasoningMd ? (
+            <div className="max-h-40 overflow-auto text-xs text-zinc-600 dark:text-zinc-400 [&_.mb-2]:mb-1">
+              <Streamdown
+                className="rag-streamdown rag-streamdown--compact"
+                animated
+                plugins={streamdownPlugins}
+                isAnimating={thinkExpanded}
+              >
+                {reasoningMd}
+              </Streamdown>
+            </div>
+          ) : (
+            <Text type="secondary" className="text-xs">
+              等待推理内容…
+            </Text>
+          )}
+        </Think>
+      ) : null}
+
+      {meta && meta.hits.length > 0 ? (
+        <div className="mb-3">
+          <Text type="secondary" className="mb-1.5 block text-xs">
+            引用来源（与已生成正文做 trigram 重叠匹配；若模型写出「片段
+            n」等哨兵也会点亮）
+          </Text>
+          <Space wrap size="small">
+            {meta.hits.map((h, idx) => {
+              const m = citationMatches.get(h.chunkId)
+              const active = m?.active ?? false
+              const tip = m
+                ? `重叠 ${(m.overlapScore * 100).toFixed(1)}%${m.fromSentinel ? ' · 哨兵' : ''}`
+                : ''
+              return (
+                <Button
+                  key={h.chunkId}
+                  size="small"
+                  type={active ? 'primary' : 'default'}
+                  title={tip}
+                >
+                  [{idx + 1}]{' '}
+                  {h.documentName ? `${h.documentName} · ` : null}
+                  <Typography.Text copyable className="text-xs">
+                    {h.documentId}
+                  </Typography.Text>
+                  {' · '}#{h.chunkIndex} · sim {h.score.toFixed(3)}
+                </Button>
+              )
+            })}
+          </Space>
+        </div>
+      ) : meta && meta.hits.length === 0 ? (
+        <Text type="secondary" className="mb-3 block text-xs">
+          本轮检索无命中片段
+        </Text>
+      ) : null}
+
+      <div className="max-w-none text-zinc-900 dark:text-zinc-100">
+        {answerMd ? (
+          <Streamdown
+            className="rag-streamdown"
+            animated
+            plugins={streamdownPlugins}
+            isAnimating={loading}
+          >
+            {answerMd}
+          </Streamdown>
+        ) : loading ? (
+          <Text type="secondary">等待正文 token…</Text>
+        ) : null}
+      </div>
+    </div>
+  )
 }
 
 export default function RagChatPanel() {
@@ -211,37 +289,122 @@ export default function RagChatPanel() {
     [answerMd, meta?.hits],
   )
 
-  /**
-   * Streamdown 在挂载了 `plugins.code` 时，上下文里的高亮主题来自
-   * `code.getThemes()`，不会采用 `<Streamdown shikiTheme={...} />`，
-   * 必须通过 createCodePlugin({ themes }) 切换。
-   */
-  const codePlugin = createCodePlugin({
-    themes: ['github-light', 'github-dark'],
-  })
+  const codePlugin = useMemo(
+    () =>
+      createCodePlugin({
+        themes: ['github-light', 'github-dark'],
+      }),
+    [],
+  )
 
   const streamdownPlugins = useMemo(
     () => ({ code: codePlugin, mermaid, math, cjk }),
     [codePlugin],
   )
 
+  const bubbleItems = useMemo((): BubbleItemType[] => {
+    const items: BubbleItemType[] = []
+    if (lastQuestion) {
+      items.push({
+        key: 'rag-user',
+        role: 'user',
+        placement: 'end',
+        shape: 'round',
+        variant: 'filled',
+        content: lastQuestion,
+      })
+    }
+    const showAssistant =
+      lastQuestion &&
+      (loading || reasoningMd || answerMd || meta !== null)
+    if (showAssistant) {
+      items.push({
+        key: 'rag-assistant',
+        role: 'ai',
+        placement: 'start',
+        variant: 'outlined',
+        streaming: loading,
+        content: (
+          <RagAssistantBubbleContent
+            meta={meta}
+            metaSummary={metaSummary}
+            reasoningMd={reasoningMd}
+            reasoningComplete={reasoningComplete}
+            thinkExpanded={thinkExpanded}
+            onThinkExpand={setThinkExpanded}
+            reasoningTokenCount={reasoningTokenCount}
+            loading={loading}
+            streamdownPlugins={streamdownPlugins}
+            citationMatches={citationMatches}
+            answerMd={answerMd}
+          />
+        ),
+        footer:
+          reasoningMd || answerMd || loading ? (
+            <Space size={4} wrap className="items-center">
+              <Text type="secondary" className="text-xs">
+                token:
+              </Text>
+              {reasoningMd ? (
+                <Tag className="m-0">推理 {reasoningTokenCount}</Tag>
+              ) : null}
+              <Tag color="blue" className="m-0">
+                正文 {answerTokenCount}
+              </Tag>
+              {reasoningMd && (answerMd || loading) ? (
+                <Tag className="m-0">
+                  合计 {reasoningTokenCount + answerTokenCount}
+                </Tag>
+              ) : null}
+            </Space>
+          ) : null,
+      })
+    }
+    return items
+  }, [
+    lastQuestion,
+    loading,
+    reasoningMd,
+    answerMd,
+    meta,
+    metaSummary,
+    reasoningComplete,
+    thinkExpanded,
+    reasoningTokenCount,
+    answerTokenCount,
+    streamdownPlugins,
+    citationMatches,
+  ])
+
+  const bubbleRole = useMemo(
+    () => ({
+      user: {
+        placement: 'end' as const,
+        shape: 'round' as const,
+      },
+      ai: {
+        placement: 'start' as const,
+        styles: {
+          content: { maxWidth: 'min(100%, 56rem)' },
+        },
+      },
+    }),
+    [],
+  )
+
   return (
     <XProvider>
-      <div className="w-full relative h-[calc(100vh-120px)]">
-        <Typography.Title level={4} className="mb-3!">
-          RAG 对话（SSE）
-        </Typography.Title>
-        <Text type="secondary" className="mb-4 block text-sm">
-          POST /api/rag/chat · @ant-design/x Sender · ReadableStream 解析 SSE ·
-          react-markdown 增量渲染
-        </Text>
+      <div className="relative flex h-[calc(100vh-120px)] w-full flex-col">
+        <div className="shrink-0">
+          <Typography.Title level={4} className="mb-3!">
+            RAG 对话（SSE）
+          </Typography.Title>
+          <Text type="secondary" className="mb-4 block text-sm">
+            POST /api/rag/chat · @ant-design/x Sender + Bubble · ReadableStream
+            解析 SSE · Streamdown 增量渲染
+          </Text>
 
-        <Space
-          orientation="vertical"
-          size="middle"
-          className="w-full pb-[calc(5.5rem+env(safe-area-inset-bottom,0))] relative"
-        >
-          <Space wrap align="center" className="w-full">
+          <Space wrap align="center" className="mb-4 w-full">
             <Text type="secondary" className="text-xs">
               限定文档（可选）
             </Text>
@@ -255,137 +418,23 @@ export default function RagChatPanel() {
             />
           </Space>
 
-          {lastQuestion && (
-            <Card size="small" title="你的问题" className="right">
-              <Text>{lastQuestion}</Text>
-            </Card>
-          )}
+          {error ? (
+            <Alert type="error" message={error} showIcon className="mb-3 w-full" />
+          ) : null}
+        </div>
 
-          {error && (
-            <Alert type="error" message={error} showIcon className="w-full" />
-          )}
+        <Bubble.List
+          role={bubbleRole}
+          items={bubbleItems}
+          autoScroll
+          className="min-h-0 flex-1"
+          classNames={{
+            scroll:
+              'min-h-0 flex-1 overflow-y-auto overflow-x-hidden pb-[calc(5.5rem+env(safe-area-inset-bottom,0))] pr-0.5',
+          }}
+        />
 
-          {(answerMd || reasoningMd || loading) && (
-            <Card
-              size="small"
-              title="模型回复"
-              extra={
-                <Space size={4} wrap className="items-center">
-                  <Text type="secondary" className="text-xs">
-                    token:
-                  </Text>
-                  {reasoningMd ? (
-                    <Tag className="m-0">推理 {reasoningTokenCount}</Tag>
-                  ) : null}
-                  <Tag color="blue" className="m-0">
-                    正文 {answerTokenCount}
-                  </Tag>
-                  {reasoningMd && (answerMd || loading) ? (
-                    <Tag className="m-0">
-                      合计 {reasoningTokenCount + answerTokenCount}
-                    </Tag>
-                  ) : null}
-                </Space>
-              }
-            >
-              {meta ? (
-                <Text type="secondary" className="mb-2 block text-xs">
-                  {metaSummary ?? ''}
-                </Text>
-              ) : null}
-
-              {reasoningMd || (!reasoningComplete && loading) ? (
-                <Think
-                  className="mb-3"
-                  title={`推理过程 · token: ${reasoningTokenCount}`}
-                  loading={!reasoningComplete && loading}
-                  expanded={thinkExpanded}
-                  onExpand={setThinkExpanded}
-                >
-                  {reasoningMd ? (
-                    <div
-                      className={`max-h-40 overflow-auto text-xs text-zinc-600 dark:text-zinc-400 [&_.mb-2]:mb-1  `}
-                    >
-                      {/* <ReactMarkdown components={mdComponents}>
-                      {reasoningMd}
-                    </ReactMarkdown> */}
-                      <Streamdown
-                        className="rag-streamdown rag-streamdown--compact"
-                        animated
-                        plugins={streamdownPlugins}
-                        isAnimating={thinkExpanded}
-                      >
-                        {reasoningMd}
-                      </Streamdown>
-                    </div>
-                  ) : (
-                    <Text type="secondary" className="text-xs">
-                      等待推理内容…
-                    </Text>
-                  )}
-                </Think>
-              ) : null}
-
-              {meta && meta.hits.length > 0 ? (
-                <div className="mb-3">
-                  <Text type="secondary" className="mb-1.5 block text-xs">
-                    引用来源（与已生成正文做 trigram 重叠匹配；若模型写出「片段
-                    n」等哨兵也会点亮）
-                  </Text>
-                  <Space wrap size="small">
-                    {meta.hits.map((h, idx) => {
-                      const m = citationMatches.get(h.chunkId)
-                      const active = m?.active ?? false
-                      const tip = m
-                        ? `重叠 ${(m.overlapScore * 100).toFixed(1)}%${m.fromSentinel ? ' · 哨兵' : ''}`
-                        : ''
-                      return (
-                        <Button
-                          key={h.chunkId}
-                          size="small"
-                          type={active ? 'primary' : 'default'}
-                          title={tip}
-                        >
-                          [{idx + 1}]{' '}
-                          {h.documentName ? `${h.documentName} · ` : null}
-                          <Typography.Text copyable className="text-xs">
-                            {h.documentId}
-                          </Typography.Text>
-                          {' · '}#{h.chunkIndex} · sim {h.score.toFixed(3)}
-                        </Button>
-                      )
-                    })}
-                  </Space>
-                </div>
-              ) : meta && meta.hits.length === 0 ? (
-                <Text type="secondary" className="mb-3 block text-xs">
-                  本轮检索无命中片段
-                </Text>
-              ) : null}
-
-              {/* 回答 */}
-              <div className={`max-w-none text-zinc-900 dark:text-zinc-100  `}>
-                {answerMd ? (
-                  // <ReactMarkdown components={mdComponents}>
-                  //   {answerMd}
-                  // </ReactMarkdown>
-                  <Streamdown
-                    className="rag-streamdown"
-                    animated
-                    plugins={streamdownPlugins}
-                    isAnimating={loading}
-                  >
-                    {answerMd}
-                  </Streamdown>
-                ) : loading ? (
-                  <Text type="secondary">等待正文 token…</Text>
-                ) : null}
-              </div>
-            </Card>
-          )}
-        </Space>
-
-        <div className="fixed w-[50%] left-1/2   -translate-x-1/2 bottom-[16px] z-10 rounded-lg border border-zinc-200 bg-background p-1 shadow-[0_-4px_14px_color-mix(in_oklch,var(--foreground)_6%,transparent)] dark:border-zinc-700">
+        <div className="fixed bottom-4 left-1/2 z-10 w-[min(100%-2rem,42rem)] -translate-x-1/2 rounded-lg border border-zinc-200 bg-background p-1 shadow-[0_-4px_14px_color-mix(in_oklch,var(--foreground)_6%,transparent)] dark:border-zinc-700">
           <Sender
             value={senderValue}
             onChange={(v) => setSenderValue(v)}
