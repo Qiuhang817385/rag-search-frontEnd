@@ -64,6 +64,7 @@ export function parseSseDataPayloads(buffer: string): {
   return { payloads, rest }
 }
 
+/** 消费 ReadableStream，按 SSE 帧解析并回调（与 `/api/rag/chat`、`/api/chat/stream` 格式一致） */
 export async function consumeRagChatSse(
   body: ReadableStream<Uint8Array> | null,
   handlers: {

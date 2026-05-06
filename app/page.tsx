@@ -55,6 +55,22 @@ export default function Home() {
             </Col>
             <Col xs={24} md={12}>
               <Card
+                title="对话"
+                variant="borderless"
+                className="h-full shadow-sm"
+              >
+                <Paragraph type="secondary" className="mb-4">
+                  基于 SSE 的对话与 Markdown 渲染、引用来源与 token 统计。
+                </Paragraph>
+                <Link href="/chat">
+                  <Button type="primary" block size="large">
+                    进入 /chat
+                  </Button>
+                </Link>
+              </Card>
+            </Col>
+            <Col xs={24} md={12}>
+              <Card
                 title="WebSocket 调试"
                 variant="borderless"
                 className="h-full shadow-sm"

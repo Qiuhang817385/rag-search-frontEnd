@@ -9,7 +9,11 @@ import {
   nestBffPath,
 } from '@/lib/backend-url'
 
-export { BACKEND_API_PREFIX, getBackendOrigin, nestBffPath } from '@/lib/backend-url'
+export {
+  BACKEND_API_PREFIX,
+  getBackendOrigin,
+  nestBffPath,
+} from '@/lib/backend-url'
 
 function assertClient(label: string) {
   if (typeof window === 'undefined') {
@@ -20,7 +24,10 @@ function assertClient(label: string) {
 }
 
 /** 经 BFF 转发到 Nest（自动携带 Cookie） */
-function bffFetch(apiPath: string, init: RequestInit = {}): Promise<Response> {
+export function bffFetch(
+  apiPath: string,
+  init: RequestInit = {},
+): Promise<Response> {
   assertClient('bffFetch')
   return fetch(nestBffPath(apiPath), {
     credentials: 'include',

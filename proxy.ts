@@ -3,10 +3,12 @@ import type { NextRequest } from 'next/server'
 
 const PUBLIC_PATHS = ['/login', '/register']
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   const sessionId = request.cookies.get('session_id')?.value
-  const isPublic = PUBLIC_PATHS.some((p) => pathname === p || pathname.startsWith(`${p}/`))
+  const isPublic = PUBLIC_PATHS.some(
+    (p) => pathname === p || pathname.startsWith(`${p}/`),
+  )
 
   if (!sessionId && !isPublic) {
     return NextResponse.redirect(new URL('/login', request.url))
