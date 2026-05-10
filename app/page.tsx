@@ -86,6 +86,22 @@ export default function Home() {
                 </Link>
               </Card>
             </Col>
+            <Col xs={24} md={12}>
+              <Card
+                title="语音对话"
+                variant="borderless"
+                className="h-full shadow-sm"
+              >
+                <Paragraph type="secondary" className="mb-4">
+                  语音对话
+                </Paragraph>
+                <Link href="/voice">
+                  <Button type="primary" block size="large">
+                    进入 /voice
+                  </Button>
+                </Link>
+              </Card>
+            </Col>
           </Row>
         </div>
       </div>
